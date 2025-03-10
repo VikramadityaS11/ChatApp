@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Private Chat</title>
+</head>
+<body>
+<h2>WebSocket Private Chat</h2>
+
+<!-- User Connection -->
+<input id="name" type="text" placeholder="Enter your username">
+<button onclick="connect()">Connect</button>
+<br><br>
+
+<!-- Private Chat -->
+<h3>Private Chat</h3>
+<input id="receiver" type="text" placeholder="Enter receiver's ID">
+<input id="privateMessage" type="text" placeholder="Enter private message">
+<button onclick="sendPrivateMessage()">Send Private</button>
+
+<!-- Chat Messages -->
+<h3>Chat Messages</h3>
+<ul id="chat"></ul>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+<script>
+    let stompClient = null;
+    let username = null;
+
+    function connect() {
+        let socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        username = document.getElementById('name').value.trim();
+
+        stompClient.connect({}, function (frame) {
+            console.log("✅ Connected to server:", frame);
+            stompClient.send("/app/chat.addUser", {}, JSON.stringify({ senderId: Number(username), type: "JOIN" }));
+
+            // Subscribe to public messages
+            stompClient.subscribe('/topic/public', function (message) {
+                console.log("📩 Received public message:", message.body);
+                showMessage(JSON.parse(message.body));
+            });
+
+            // Subscribe to PRIVATE messages
+            stompClient.subscribe(`/user/${Number(username)}/queue/messages`, function (message) {
+                console.log("📩 Received private message:", message.body);
+                showMessage(JSON.parse(message.body));
+            });
+
+            // Subscribe to private chat history
+            stompClient.subscribe(`/user/${Number(username)}/queue/history`, function (message) {
+                console.log("📜 Received chat history:", message.body);
+                let history = JSON.parse(message.body);
+                history.reverse().forEach(showMessage);
+            });
+
+            // Debug: Check active subscriptions
+            setTimeout(() => {
+                console.log("🔍 Active STOMP subscriptions:", stompClient.subscriptions);
+            }, 3000);
+        }, function (error) {
+            console.error("❌ WebSocket error:", error);
+        });
+    }
+
+    function sendPrivateMessage() {
+        let receiver = document.getElementById('receiver').value.trim();
+        let message = document.getElementById('privateMessage').value.trim();
+
+        if (!receiver || !message) {
+            alert("Receiver ID and message cannot be empty.");
+            return;
+        }
+
+        let chatMessage = {
+            senderId: Number(username),  // Convert to number
+            receiverId: Number(receiver),  // Convert to number
+            content: message
+        };
+
+        console.log("🚀 Sending private message:", chatMessage);
+        stompClient.send("/app/chat.privateMessage", {}, JSON.stringify(chatMessage));
+
+        document.getElementById('privateMessage').value = "";
+    }
+
+    function showMessage(chatMessage) {
+        let messageElement = document.createElement('li');
+
+        if (chatMessage.type === "JOIN") {
+            messageElement.innerText = chatMessage.senderId + " joined the chat.";
+        } else if (chatMessage.type === "LEAVE") {
+            messageElement.innerText = chatMessage.senderId + " left the chat.";
+        } else {
+            messageElement.innerText = chatMessage.senderId + ": " + chatMessage.content;
+        }
+
+        document.getElementById('chat').appendChild(messageElement);
+    }
+</script>
+
+</body>
+</html>

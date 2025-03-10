@@ -1,7 +1,7 @@
-package com.vikram.chat.chat;
+package com.vikram.chat.entity;
 
 public enum MessageType {
     CHAT,
     JOIN,
-    LEAVER
+    LEAVE
 }
